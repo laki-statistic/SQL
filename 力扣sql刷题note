@@ -1,0 +1,53 @@
+#最近一个月（recent_month）
+with t1 as(
+select *, max(month) over(partition by id) as recent_month
+from employee)
+
+#rows between 2 preceding and current row：定义窗口范围，指定当前行以及前两行（包括当前行）作为计算薪水的范围(累计工资）
+select id, month, sum(salary) over(partition by id order by month rows between 2 preceding and current row) as salary
+from t1
+where month<recent_month
+order by 1, 2 desc
+
+
+#求中位数，平均频数位于累计频数与上一个累计频数（累计频数与频数作差）之间
+#无group by 求和加窗口sum(frequency) over()
+#sum(frequency) over(order by number) as cum_sum累计求和
+with t1 as(
+select *,
+sum(frequency) over(order by number) as cum_sum, (sum(frequency) over())/2 as middle
+from numbers)
+
+select avg(number) as median
+from t1
+where middle between (cum_sum - frequency) and cum_sum
+
+
+#累计求和
+#自连接加连接条件
+#窗口函数 order by本质为累加
+聚合函数 over (partition by xxx order by xxx )
+select a1.player_id,a1.event_date,
+sum(a2.games_played) as games_played_so_far
+from activity a1
+left join activity a2 on a1.player_id=a2.player_id
+where a1.event_date>=a2.event_date
+group by a1.player_id,a1.event_date;
+
+
+
+#排除思路求非且子集
+select distinct student_id, student_name
+from exam join student
+using (student_id)
+where student_id != all(select student_id from t1)
+order by 1
+
+#第一天留存率
+lead(event_date,1) over(partition by player_id order by event_date) as nxt
+round(sum(case when nxt=event_date+1 then 1 else 0 end)/count(distinct player_id),2) as Day1_retention
+
+#group by 分组聚合后的结果作为新的筛选条件时，需使用子查询联结表
+
+
+
