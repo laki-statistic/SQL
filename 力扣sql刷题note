@@ -50,4 +50,23 @@ round(sum(case when nxt=event_date+1 then 1 else 0 end)/count(distinct player_id
 #group by 分组聚合后的结果作为新的筛选条件时，需使用子查询联结表
 
 
+#基于特定条件判断用户生成标签时，为顾及不满足某一条件被筛选掉的用户，可以将用户表与生成的聚类表左连接
+# coalesce(2nd_item_fav_brand,"no")--2nd_item_fav_brand变量在为空值时返回null
+
+with t1 as(
+select user_id, 
+case when favorite_brand = item_brand then "yes"
+else "no"
+end as 2nd_item_fav_brand
+from users u left join
+(select o.item_id, seller_id, item_brand, rank() over(partition by seller_id order by order_date) as rk
+from orders o join items i
+using (item_id)) a
+on u.user_id = a.seller_id
+where a.rk = 2)
+
+select u.user_id as seller_id, coalesce(2nd_item_fav_brand,"no") as 2nd_item_fav_brand
+from users u left join t1
+using(user_id)
+
 
