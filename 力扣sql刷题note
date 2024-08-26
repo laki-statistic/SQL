@@ -1,4 +1,5 @@
 #最近一个月（recent_month）
+
 with t1 as(
 select *, max(month) over(partition by id) as recent_month
 from employee)
@@ -13,6 +14,7 @@ order by 1, 2 desc
 #求中位数，平均频数位于累计频数与上一个累计频数（累计频数与频数作差）之间
 #无group by 求和加窗口sum(frequency) over()
 #sum(frequency) over(order by number) as cum_sum累计求和
+
 with t1 as(
 select *,
 sum(frequency) over(order by number) as cum_sum, (sum(frequency) over())/2 as middle
@@ -27,6 +29,7 @@ where middle between (cum_sum - frequency) and cum_sum
 #自连接加连接条件
 #窗口函数 order by本质为累加
 聚合函数 over (partition by xxx order by xxx )
+
 select a1.player_id,a1.event_date,
 sum(a2.games_played) as games_played_so_far
 from activity a1
@@ -37,6 +40,7 @@ group by a1.player_id,a1.event_date;
 
 
 #排除思路求非且子集
+
 select distinct student_id, student_name
 from exam join student
 using (student_id)
@@ -44,12 +48,11 @@ where student_id != all(select student_id from t1)
 order by 1
 
 #第一天留存率
+
 lead(event_date,1) over(partition by player_id order by event_date) as nxt
 round(sum(case when nxt=event_date+1 then 1 else 0 end)/count(distinct player_id),2) as Day1_retention
 
 #group by 分组聚合后的结果作为新的筛选条件时，需使用子查询联结表
-
-
 #基于特定条件判断用户生成标签时，为顾及不满足某一条件被筛选掉的用户，可以将用户表与生成的聚类表左连接
 # coalesce(2nd_item_fav_brand,"no")--2nd_item_fav_brand变量在为空值时返回null
 
@@ -70,3 +73,117 @@ from users u left join t1
 using(user_id)
 
 
+#求连续时间段
+时间排序与1到n序列row_number() over(order by fail_date)作差，生成变量diff，基于diff分组，同一组则为连续时间段
+#date_sub(date, INTERVAL expr unit)
+#expr是一个整数，表示要减去的时间间隔的数量。unit是一个字符串，表示要减去的时间间隔的单位，可以是以下之一：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
+
+with t1 as(
+select min(success_date) as start_date, max(success_date) as end_date, state
+from(
+select *, date_sub(success_date, interval row_number() over(order by success_date) day) as diff, 1 as state
+from succeeded
+where success_date between "2019-01-01" and "2019-12-31") a
+group by diff),
+
+t2 as(
+select min(fail_date) as start_date, max(fail_date) as end_date, state
+from(
+select *, date_sub(fail_date, interval row_number() over(order by fail_date) day) as diff, 0 as state
+from failed
+where fail_date between "2019-01-01" and "2019-12-31") b
+group by diff)
+
+
+select 
+case when c.state = 1 then "succeeded"
+else "failed"
+end as period_state,start_date, end_date
+from(
+select *
+from t1
+union all
+select *
+from t2) c
+order by start_date
+
+#行转列-二维表：case when+窗口函数
+#dayname函数，用于返回给定日期的星期几名称
+
+with t1 as(
+select distinct item_category,
+case when dayname(order_date)='Monday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Monday,
+Case when dayname(order_date)='Tuesday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Tuesday,
+Case when dayname(order_date)='Wednesday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Wednesday,
+Case when dayname(order_date)='Thursday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Thursday,
+Case when dayname(order_date)='Friday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Friday,
+Case when dayname(order_date)='Saturday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Saturday,
+Case when dayname(order_date)='Sunday' then sum(quantity) over(partition by item_category,dayname(order_date)) else 0 end as Sunday
+from orders o
+right join items i
+using (item_id))
+
+select item_category as category, sum(Monday) as Monday, sum(Tuesday) as Tuesday, sum(Wednesday) Wednesday, sum(Thursday) Thursday,
+sum(Friday) Friday, sum(Saturday) Saturday, sum(Sunday) Sunday
+from t1
+group by item_category
+
+
+#行转列-一维表：先row_number() over(partition by continent order by name)分区排序，后基于排序序号分组case when一一处理
+
+select min(case when continent = 'America' then name end) as America,
+min(case when continent = 'Asia' then name end) as Asia,
+min(case when continent = 'Europe' then name end) as Europe
+from 
+(select *, row_number() over(partition by continent order by name) as rn
+from student) a
+group by rn
+
+
+
+#时间段划分后计算合成指标，重点判断时间段是否跨年度
+#DATE_FORMAT(b.period_start,'%Y-12-31')'%Y-12-31'表示输出的日期格式是以年份为四位数，月份固定为12，日期固定为31的格式
+#DAYOFYEAR(b.period_end)返回给定日期的年份中的天数
+
+SELECT
+    b.product_id,
+    a.product_name,
+    a.yr AS report_year,
+    CASE 
+        WHEN YEAR(b.period_start)=YEAR(b.period_end) AND a.yr=YEAR(b.period_start) THEN DATEDIFF(b.period_end,b.period_start)+1
+        WHEN a.yr=YEAR(b.period_start) THEN DATEDIFF(DATE_FORMAT(b.period_start,'%Y-12-31'),b.period_start)+1
+        WHEN a.yr=YEAR(b.period_end) THEN DAYOFYEAR(b.period_end) 
+        WHEN a.yr>YEAR(b.period_start) AND a.yr<YEAR(b.period_end) THEN 365
+        ELSE 0
+    END * average_daily_sales AS total_amount
+FROM
+    (SELECT product_id,product_name,'2018' AS yr FROM Product
+    UNION
+    SELECT product_id,product_name,'2019' AS yr FROM Product
+    UNION
+    SELECT product_id,product_name,'2020' AS yr FROM Product) a
+    JOIN 
+    Sales b
+    ON a.product_id=b.product_id  
+HAVING total_amount > 0
+ORDER BY b.product_id,a.yr
+
+
+#union创建表后表连接，使得零用户使用记录也可成一行数据
+SELECT p.spend_date, p.platform, IFNULL(SUM(amount), 0) total_amount, COUNT(DISTINCT u.user_id) total_users
+FROM
+(
+SELECT DISTINCT(spend_date), 'desktop' platform FROM Spending
+UNION
+SELECT DISTINCT(spend_date), 'mobile' platform FROM Spending
+UNION
+SELECT DISTINCT(spend_date), 'both' platform FROM Spending
+) p LEFT JOIN
+
+(SELECT user_id, spend_date, SUM(amount) amount, (CASE WHEN COUNT(DISTINCT platform)>1 THEN "both" ELSE platform END) platform
+FROM Spending
+GROUP BY spend_date, user_id) u
+
+ON p.platform = u.platform AND p.spend_date=u.spend_date
+
+GROUP BY p.spend_date, p.platform
