@@ -187,3 +187,17 @@ GROUP BY spend_date, user_id) u
 ON p.platform = u.platform AND p.spend_date=u.spend_date
 
 GROUP BY p.spend_date, p.platform
+
+
+#删除重复记录
+DELETE
+FROM
+    Person
+WHERE
+    id NOT IN ( SELECT id FROM ( SELECT min( id ) AS id FROM Person GROUP BY email ) AS m )
+
+
+
+
+
+
