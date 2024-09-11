@@ -197,6 +197,83 @@ WHERE
     id NOT IN ( SELECT id FROM ( SELECT min( id ) AS id FROM Person GROUP BY email ) AS m )
 
 
+#自连接
+select * from B right join
+(select id,ti.score,t2.score from (select id,score from A where cid=1)as t1,(select id,score from A where sid=2) as t2
+where t1.id=t2.id and t1.score>t2.score) as r 
+on B.id=r,id
+
+
+select disinct a.* from A ,B 
+where A.id=B.id
+
+#内连接只会显示交集
+select * from  A inner join B on A.ID=B.id
+#左连接后替换null为0
+select A.ID,IFNULL(B.score ,0) as b1 ,IFNULL(B.sum ,0) as b2,from A left join B on  A.ID=B.id
+
+#当exisis 内的子查询（可以直接使用父查询的表）有符合条件的记录时返回TRUE 执行父查询
+SELECT *
+FROM A
+WHERE EXISTS (SELECT Id FROM B WHERE A.Id = B.Id);
+
+
+#正则表达式（%匹配任意数量字符）
+where name like '李%'
+
+#多表联结
+select A.* from A,B,C
+where A.a =B.b
+and B.b =C.c
+and A.a =c. c
+
+select A.* from A inner join B 
+inner join C
+on A.a=B.b
+and A.a=C.c
+
+#子查询或者内连接都可以作为筛选条件
+select * from A Where A.a in (select * from B where B.b='')
+
+select distinct A.* from  A inner join (select * from B where B.b = '')
+on A.id=B.id
+
+
+#自连接(内联结)做内部条件对比与筛选
+select A1.* from A as A1,a A as A2
+where A1.ID=A2.ID
+and A2.b = ''
+and A2.b <> A1.b
+
+#联结时可以对B表直接加筛选条件，条件加在on 后面的and ，或者先联结后再对联结后的表进行where后的筛选
+select * from A join B on A.a=B.b
+and B.c = ''
+
+select * from A join B on A.a=B.b where B.c = ''
+
+#null时替换为0
+coalesce(a,0)
+#现在时间
+now()
+DATE_FORMAT(CURDATE(), '%m%d')
+#计算两时间的差值，year表示计算的为年数差异
+TIMESTAMPDIFF(YEAR, time1, time2)
+#获取日期所在年份的周数(第几周)
+WEEKOFYEAR(time1) 
+
+
+
+
+#窗口函数
+1.名次重复时保留名次空缺
+
+DENSE_RANK() OVER (PARTITION BY subject ORDER BY score DESC) AS ranking
+
+
+#无聚合维度，使用聚合函数后，得到如max值后，若还需要附带其他信息，需要使用子查询
+select * from A where a = (select max(a) from A where b = '')
+
+
 
 
 
